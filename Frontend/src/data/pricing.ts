@@ -1,0 +1,56 @@
+import type { PricingTier } from "../types";
+
+export const pricingTiers: readonly PricingTier[] = [
+  {
+    name: "Free",
+    price: "$0",
+    period: "forever",
+    description: "For individual developers exploring Cursorline.",
+    features: [
+      "1 hour of AI chat",
+      "Single-repo indexing",
+      "Stack trace analysis",
+      "VS Code extension",
+      "Community support",
+    ],
+    cta: "Get Started Free",
+    highlighted: false,
+    plan: "free",
+  },
+  {
+    name: "Pro",
+    price: "$19",
+    period: "/month",
+    description: "For professional developers who ship daily.",
+    features: [
+      "30 days of AI chat",
+      "Unlimited completions",
+      "Multi-repo indexing",
+      "Multi-file refactors",
+      "Git-aware PR review",
+      "All supported editors",
+      "Priority support",
+    ],
+    cta: "Start Pro Trial",
+    highlighted: true,
+    plan: "pro",
+  },
+  {
+    name: "Plus",
+    price: "$49",
+    period: "/month",
+    description: "For teams that want shared context and admin controls.",
+    features: [
+      "90 days of AI chat",
+      "Everything in Pro",
+      "Shared team context",
+      "Org-wide codebase index",
+      "Admin dashboard & usage",
+      "SSO / SAML",
+      "Dedicated support",
+    ],
+    cta: "Contact Sales",
+    highlighted: false,
+    plan: "plus",
+  },
+];
