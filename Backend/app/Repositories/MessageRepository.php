@@ -39,4 +39,14 @@ class MessageRepository extends BaseRepository implements MessageRepositoryInter
             'tokens' => $tokens,
         ]);
     }
+
+    public function updateMessage(int $messageId, string $content): ?Message
+    {
+        $message = Message::find($messageId);
+        if (! $message) {
+            return null;
+        }
+        $message->update(['content' => $content]);
+        return $message;
+    }
 }

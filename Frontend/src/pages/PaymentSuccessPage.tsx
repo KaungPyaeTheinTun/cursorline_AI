@@ -13,11 +13,13 @@ export default function PaymentSuccessPage() {
     email?: string;
     plan?: string;
   }>({});
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (!sessionId) {
       setStatus("error");
+      setErrorMessage("No session ID found in the URL.");
       return;
     }
 
@@ -32,9 +34,13 @@ export default function PaymentSuccessPage() {
           });
         } else {
           setStatus("error");
+          setErrorMessage(`Payment status: ${result.status || "unknown"}. Please try again.`);
         }
       })
-      .catch(() => setStatus("error"));
+      .catch((err) => {
+        setStatus("error");
+        setErrorMessage(err.message || "We couldn't confirm your payment. If you were charged, please contact support.");
+      });
   }, [searchParams, refreshUser]);
 
   return (
@@ -87,8 +93,7 @@ export default function PaymentSuccessPage() {
               Payment Issue
             </h1>
             <p className="mb-8 text-muted">
-              We couldn't confirm your payment. If you were charged, please
-              contact support.
+              {errorMessage || "We couldn't confirm your payment. If you were charged, please contact support."}
             </p>
             <Link
               to="/"

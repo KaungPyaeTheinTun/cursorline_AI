@@ -19,7 +19,9 @@ export default function ToastContainer() {
               ? "border-green/30 bg-green/10 text-green"
               : t.type === "error"
                 ? "border-red/30 bg-red/10 text-red"
-                : "border-blue/30 bg-blue/10 text-blue"
+                : t.type === "warning"
+                  ? "border-yellow/30 bg-yellow/10 text-yellow"
+                  : "border-blue/30 bg-blue/10 text-blue"
           }`}
         >
           {t.message}

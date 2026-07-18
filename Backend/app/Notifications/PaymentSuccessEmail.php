@@ -35,6 +35,11 @@ class PaymentSuccessEmail extends Notification
 
         $period = $planModel?->period ?? 'month';
 
+        $startDate = now()->format('M d, Y');
+        $endDate = $planModel
+            ? now()->addMinutes($planModel->usage_duration_minutes)->format('M d, Y')
+            : now()->addMonth()->format('M d, Y');
+
         return (new MailMessage)
             ->subject("Welcome to Cursorline {$planName}!")
             ->markdown('emails.payment-success', [
@@ -43,6 +48,8 @@ class PaymentSuccessEmail extends Notification
                 'amount' => $amount,
                 'period' => $period,
                 'subscriptionId' => $this->subscriptionId,
+                'startDate' => $startDate,
+                'endDate' => $endDate,
             ]);
     }
 

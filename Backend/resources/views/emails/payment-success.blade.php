@@ -71,6 +71,14 @@
                         </td>
                       </tr>
                       <tr>
+                        <td style="padding-bottom:12px;">
+                          <span style="font-size:13px;color:#6B7280;">Duration</span>
+                        </td>
+                        <td style="padding-bottom:12px;text-align:right;">
+                          <span style="font-size:14px;font-weight:600;color:#111827;">{{ $startDate }} – {{ $endDate }}</span>
+                        </td>
+                      </tr>
+                      <tr>
                         <td>
                           <span style="font-size:13px;color:#6B7280;">Subscription ID</span>
                         </td>

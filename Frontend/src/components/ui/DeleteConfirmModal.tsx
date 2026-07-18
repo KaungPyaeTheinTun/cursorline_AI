@@ -54,7 +54,7 @@ export default function DeleteConfirmModal({
         <h3 className="text-center text-base font-semibold text-ink">{title}</h3>
         <p className="mt-1.5 text-center text-sm text-muted">{description}</p>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex justify-center gap-3">
           <button
             onClick={onCancel}
             disabled={loading}

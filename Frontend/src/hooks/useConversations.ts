@@ -109,6 +109,18 @@ export function useConversations() {
     [],
   );
 
+  const updateMessage = useCallback(
+    async (conversationId: number, messageId: number, content: string): Promise<void> => {
+      await apiClient.put(`/conversations/${conversationId}/messages/${messageId}`, {
+        content,
+      });
+      setActiveMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, content } : m)),
+      );
+    },
+    [],
+  );
+
   const updateTitle = useCallback(async (id: number, title: string) => {
     try {
       await apiClient.put(`/conversations/${id}`, { title });
@@ -146,6 +158,7 @@ export function useConversations() {
     fetchConversations,
     createConversation,
     appendMessage,
+    updateMessage,
     updateTitle,
     deleteConversation,
     selectConversation,

@@ -56,10 +56,11 @@ function LandingPage() {
 }
 
 const NO_FOOTER_ROUTES = ["/build"];
+const KNOWN_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/verify-code", "/reset-password", "/build", "/payment/success", "/payment/cancel", "/auth/callback", "/roadmap", "/blog", "/docs", "/changelog", "/community", "/about", "/contact"];
 
 function AppLayout() {
   const { pathname } = useLocation();
-  const hideFooter = NO_FOOTER_ROUTES.includes(pathname);
+  const hideFooter = NO_FOOTER_ROUTES.includes(pathname) || !KNOWN_ROUTES.includes(pathname);
 
   return (
     <div className="min-h-screen bg-bg text-ink">

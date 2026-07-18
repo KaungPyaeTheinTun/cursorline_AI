@@ -70,15 +70,41 @@ class StripeService extends BaseService implements StripeServiceInterface
     {
         try {
             $session = CheckoutSession::retrieve($sessionId);
+        } catch (ApiErrorException $e) {
+            \Log::error('Stripe session retrieval failed', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+            throw new \RuntimeException('Failed to retrieve payment session: ' . $e->getMessage(), 502);
+        } catch (\Throwable $e) {
+            \Log::error('Unexpected error retrieving Stripe session', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+            throw new \RuntimeException('Payment verification failed. Please try again.', 500);
+        }
 
-            if ($session->status === 'complete' && isset($session->metadata->user_id)) {
-                $user = User::find($session->metadata->user_id);
+        if ($session->status === 'complete' && isset($session->metadata->user_id)) {
+            $user = User::find($session->metadata->user_id);
 
-                if ($user) {
-                    $user->update([
-                        'subscribed_at' => now(),
-                        'plan_id' => $session->metadata->plan_id ?? null,
-                        'usage_started_at' => now(),
+            if ($user) {
+                $planId = $session->metadata->plan_id ?? null;
+
+                $user->update([
+                    'subscribed_at' => now(),
+                    'plan_id' => $planId,
+                    'usage_started_at' => now(),
+                ]);
+
+                $emailCacheKey = 'payment_email_sent:' . $sessionId;
+
+                if (! \Cache::has($emailCacheKey)) {
+                    \Cache::put($emailCacheKey, true, now()->addHours(24));
+
+                    \Log::info('Payment successful - user updated', [
+                        'user_id' => $user->id,
+                        'plan_id' => $planId,
+                        'plan_slug' => $session->metadata->plan ?? 'unknown',
                     ]);
 
                     PaymentSuccessful::dispatch(
@@ -87,16 +113,25 @@ class StripeService extends BaseService implements StripeServiceInterface
                         $session->subscription ?? '',
                     );
                 }
+            } else {
+                \Log::warning('Payment successful but user not found', [
+                    'user_id' => $session->metadata->user_id,
+                    'session_id' => $sessionId,
+                ]);
             }
-
-            return [
+        } else {
+            \Log::info('Stripe session not complete or missing metadata', [
+                'session_id' => $sessionId,
                 'status' => $session->status,
-                'customer_email' => $session->customer_email,
-                'subscription_id' => $session->subscription,
-                'plan' => $session->metadata->plan ?? null,
-            ];
-        } catch (ApiErrorException $e) {
-            throw new \RuntimeException($e->getMessage(), 502);
+                'has_user_id' => isset($session->metadata->user_id),
+            ]);
         }
+
+        return [
+            'status' => $session->status,
+            'customer_email' => $session->customer_email,
+            'subscription_id' => $session->subscription,
+            'plan' => $session->metadata->plan ?? null,
+        ];
     }
 }

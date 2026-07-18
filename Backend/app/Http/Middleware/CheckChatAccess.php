@@ -38,7 +38,16 @@ class CheckChatAccess
             return $next($request);
         }
 
-        $cacheKey = 'usage_exceeded_email_sent:' . $user->id;
+        \Log::warning('Chat access denied - plan expired', [
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'plan_name' => $plan->name,
+            'usage_started_at' => $user->usage_started_at->toIso8601String(),
+            'usage_duration_minutes' => $plan->usage_duration_minutes,
+            'expires_at' => $expiresAt->toIso8601String(),
+        ]);
+
+        $cacheKey = 'usage_exceeded_email_sent:' . $user->id . ':' . $user->usage_started_at->timestamp;
 
         if (! Cache::has($cacheKey)) {
             SendUsageExceededEmail::dispatch($user);
@@ -46,10 +55,13 @@ class CheckChatAccess
         }
 
         $planName = $plan->name;
+        $minutesLeft = max(0, (int) $expiresAt->diffInMinutes(now()));
 
         return response()->json([
             'message' => "Your {$planName} access has expired. Subscribe to continue chatting.",
             'upgrade_url' => '/#pricing',
+            'expired_at' => $expiresAt->toIso8601String(),
+            'plan_slug' => $plan->slug,
         ], 403);
     }
 }

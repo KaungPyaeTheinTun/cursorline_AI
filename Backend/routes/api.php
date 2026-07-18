@@ -56,6 +56,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/conversations/{id}', [ConversationController::class, 'destroy']);
         Route::post('/conversations/{id}/messages', [ConversationController::class, 'storeMessage']);
         Route::get('/conversations/{id}/messages', [ConversationController::class, 'messages']);
+        Route::put('/conversations/{id}/messages/{messageId}', [ConversationController::class, 'updateMessage']);
 
         // Stripe checkout
         Route::post('/checkout', [StripeController::class, 'createCheckoutSession']);

@@ -12,4 +12,6 @@ interface MessageRepositoryInterface extends BaseRepositoryInterface
     public function getOrderedByConversation(int $conversationId, string $direction = 'asc'): \Illuminate\Database\Eloquent\Collection;
 
     public function storeMessage(int $conversationId, string $role, string $content, ?int $tokens = null): Message;
+
+    public function updateMessage(int $messageId, string $content): ?Message;
 }

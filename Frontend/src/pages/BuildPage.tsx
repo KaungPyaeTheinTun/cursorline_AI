@@ -202,11 +202,131 @@ function StreamingSkeleton() {
   );
 }
 
-const UserMessage = memo(function UserMessage({ content }: { readonly content: string }) {
+const UserMessage = memo(function UserMessage({
+  content,
+  messageId,
+  onEdit,
+}: {
+  readonly content: string;
+  readonly messageId?: number;
+  readonly onEdit?: (messageId: number, newContent: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(content);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [content]);
+
+  const handleEdit = useCallback(() => {
+    setEditValue(content);
+    setEditing(true);
+  }, [content]);
+
+  const handleSave = useCallback(() => {
+    if (editValue.trim() && editValue !== content && messageId && onEdit) {
+      onEdit(messageId, editValue.trim());
+    }
+    setEditing(false);
+  }, [editValue, content, messageId, onEdit]);
+
+  const handleCancel = useCallback(() => {
+    setEditValue(content);
+    setEditing(false);
+  }, [content]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSave();
+      }
+      if (e.key === "Escape") {
+        handleCancel();
+      }
+    },
+    [handleSave, handleCancel],
+  );
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(
+        textareaRef.current.value.length,
+        textareaRef.current.value.length,
+      );
+    }
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <div className="w-full max-w-[80%]">
+        <textarea
+          ref={textareaRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={3}
+          className="w-full rounded-2xl rounded-br-md border border-blue/40 bg-blue/10 px-5 py-3 text-sm leading-relaxed text-ink outline-none resize-none"
+        />
+        <div className="mt-2 flex justify-end gap-2">
+          <button
+            onClick={handleCancel}
+            className="rounded-lg border border-line bg-surface2 px-3 py-1.5 text-xs text-muted transition-colors hover:text-ink hover:bg-white/5"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!editValue.trim() || editValue === content}
+            className="rounded-lg bg-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue/90 disabled:opacity-50"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex justify-end">
+    <div className="group relative flex justify-end">
       <div className="max-w-[80%] rounded-2xl rounded-br-md bg-blue/20 px-5 py-3 text-sm leading-relaxed text-ink">
         {content}
+      </div>
+      <div className="absolute -bottom-8 right-0 flex items-center gap-1 opacity-0 transition-all duration-150 group-hover:opacity-100">
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-xs text-muted transition-colors hover:text-ink"
+          title="Copy message"
+        >
+          {copied ? (
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+          )}
+          <span>{copied ? "Copied!" : "Copy"}</span>
+        </button>
+        {messageId && onEdit && (
+          <button
+            onClick={handleEdit}
+            className="flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-xs text-muted transition-colors hover:text-ink"
+            title="Edit message"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span>Edit</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -220,11 +340,17 @@ const AssistantMessage = memo(function AssistantMessage({ content }: { readonly 
   );
 });
 
-function MessageItem({ msg }: { readonly msg: Message }) {
+function MessageItem({
+  msg,
+  onEdit,
+}: {
+  readonly msg: Message;
+  readonly onEdit?: (messageId: number, newContent: string) => void;
+}) {
   return (
     <div className={`mx-auto mb-6 max-w-3xl ${msg.role === "user" ? "flex justify-end" : ""}`}>
       {msg.role === "user" ? (
-        <UserMessage content={msg.content} />
+        <UserMessage content={msg.content} messageId={msg.id} onEdit={onEdit} />
       ) : (
         <AssistantMessage content={msg.content} />
       )}
@@ -252,6 +378,7 @@ export default function BuildPage() {
     activeMessages,
     createConversation,
     appendMessage,
+    updateMessage,
     deleteConversation,
     selectConversation,
     newChat,
@@ -383,15 +510,20 @@ export default function BuildPage() {
               return;
             }
 
+            let streamError: string | null = null;
             try {
               const parsed = JSON.parse(data);
-              if (parsed.content) {
+              if (parsed.error) {
+                streamError = parsed.error;
+              } else if (parsed.content) {
                 fullContent += parsed.content;
                 setStreamingContent(fullContent);
               }
-              if (parsed.error) throw new Error(parsed.error);
             } catch {
               // skip malformed JSON
+            }
+            if (streamError) {
+              throw new Error(streamError);
             }
           }
         }
@@ -464,6 +596,153 @@ export default function BuildPage() {
       }
     },
     [deleteConversation],
+  );
+
+  const handleEditMessage = useCallback(
+    async (messageId: number, newContent: string) => {
+      const convoId = currentConvoIdRef.current;
+      if (!convoId || isStreamingRef.current) return;
+
+      abortRef.current?.abort();
+      setIsStreaming(false);
+      setStreamingContent("");
+      isStreamingRef.current = false;
+
+      try {
+        await updateMessage(convoId, messageId, newContent);
+      } catch {
+        return;
+      }
+
+      const idx = messagesRef.current.findIndex((m) => m.id === messageId);
+      if (idx === -1) return;
+
+      const trimmed = messagesRef.current.slice(0, idx + 1).map((m) =>
+        m.id === messageId ? { ...m, content: newContent } : m,
+      );
+      setMessages(trimmed);
+
+      const updatedMessages: Message[] = trimmed.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      isStreamingRef.current = true;
+      setStreamingContent("");
+      setIsStreaming(true);
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+
+      try {
+        const response = await fetch(`${API_URL}/chat/stream`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ messages: updatedMessages }),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          let msg = "Failed to get response.";
+          try {
+            const data = await response.json();
+            msg = data?.message || data?.error || msg;
+            if (response.status === 403) {
+              setAccessExpired(msg);
+              setIsStreaming(false);
+              isStreamingRef.current = false;
+              return;
+            }
+          } catch {
+            msg = `Server error (${response.status}).`;
+          }
+          throw new Error(msg);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No stream reader.");
+
+        const decoder = new TextDecoder();
+        let fullContent = "";
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+
+            if (data === "[DONE]") {
+              const assistantMessage: Message = { role: "assistant", content: fullContent };
+              setMessages((prev) => [...prev, assistantMessage]);
+              if (currentConvoIdRef.current) {
+                appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+              }
+              setStreamingContent("");
+              setIsStreaming(false);
+              isStreamingRef.current = false;
+              return;
+            }
+
+            let streamError: string | null = null;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.error) {
+                streamError = parsed.error;
+              } else if (parsed.content) {
+                fullContent += parsed.content;
+                setStreamingContent(fullContent);
+              }
+            } catch {
+              // skip malformed JSON
+            }
+            if (streamError) {
+              throw new Error(streamError);
+            }
+          }
+        }
+
+        if (fullContent) {
+          const assistantMessage: Message = { role: "assistant", content: fullContent };
+          setMessages((prev) => [...prev, assistantMessage]);
+          if (currentConvoIdRef.current) {
+            appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+          }
+        }
+        setStreamingContent("");
+        setIsStreaming(false);
+        isStreamingRef.current = false;
+      } catch (err) {
+        isStreamingRef.current = false;
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setIsStreaming(false);
+          setStreamingContent("");
+          return;
+        }
+        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        const assistantMessage: Message = { role: "assistant", content: `Error: ${msg}` };
+        setMessages((prev) => [...prev, assistantMessage]);
+        if (currentConvoIdRef.current) {
+          appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+        }
+        setStreamingContent("");
+        setIsStreaming(false);
+      }
+    },
+    [token, updateMessage, appendMessage],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -629,7 +908,7 @@ export default function BuildPage() {
           )}
 
           {messages.map((msg, i) => (
-            <MessageItem key={msg.id || i} msg={msg} />
+            <MessageItem key={msg.id || i} msg={msg} onEdit={handleEditMessage} />
           ))}
 
           {accessExpired && !isStreaming && (

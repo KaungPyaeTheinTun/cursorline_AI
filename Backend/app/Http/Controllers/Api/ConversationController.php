@@ -106,4 +106,27 @@ class ConversationController extends BaseApiController
 
         return $this->paginatedResponse($messages);
     }
+
+    public function updateMessage(Request $request, int $id, int $messageId): JsonResponse
+    {
+        $request->validate([
+            'content' => 'required|string|max:10000',
+        ]);
+
+        $message = $this->messageService->update(
+            $messageId,
+            $id,
+            $request->user()->id,
+            $request->input('content'),
+        );
+
+        if (! $message) {
+            return $this->errorResponse('Message not found.', 404);
+        }
+
+        return $this->successResponse(
+            new MessageResource($message),
+            'Message updated.',
+        );
+    }
 }

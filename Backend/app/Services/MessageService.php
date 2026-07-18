@@ -41,4 +41,15 @@ class MessageService extends BaseService implements MessageServiceInterface
             return $message;
         });
     }
+
+    public function update(int $messageId, int $conversationId, int $userId, string $content): ?Message
+    {
+        $message = $this->messageRepository->updateMessage($messageId, $content);
+
+        if ($message) {
+            $this->cacheFlush("conversation:{$conversationId}:messages");
+        }
+
+        return $message;
+    }
 }

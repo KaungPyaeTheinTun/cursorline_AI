@@ -3,17 +3,22 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth, useToast } from "../../hooks/useAuth";
 
 export default function ProtectedRoute({ children }: { readonly children: React.ReactNode }) {
-  const { token, isAuthLoaded } = useAuth();
+  const { token, user, isAuthLoaded } = useAuth();
   const { toast } = useToast();
   const { pathname } = useLocation();
-  const shown = useRef(false);
+  const authToastShown = useRef(false);
+  const subToastShown = useRef(false);
 
   useEffect(() => {
-    if (isAuthLoaded && !token && !shown.current) {
-      shown.current = true;
+    if (isAuthLoaded && !token && !authToastShown.current) {
+      authToastShown.current = true;
       toast("Please sign in to access this page.", "error");
     }
-  }, [isAuthLoaded, token, toast]);
+    if (isAuthLoaded && token && user && !user.subscribed_at && !subToastShown.current) {
+      subToastShown.current = true;
+      toast("You need an active plan to access this page. Please subscribe.", "error");
+    }
+  }, [isAuthLoaded, token, user, toast]);
 
   if (!isAuthLoaded) {
     return (
@@ -72,6 +77,10 @@ export default function ProtectedRoute({ children }: { readonly children: React.
 
   if (!token) {
     return <Navigate to="/login" state={{ from: pathname }} replace />;
+  }
+
+  if (user && !user.subscribed_at) {
+    return <Navigate to="/#pricing" state={{ from: pathname }} replace />;
   }
 
   return <>{children}</>;

@@ -41,7 +41,10 @@ class StripeController extends BaseApiController
 
             return $this->successResponse($result);
         } catch (\Throwable $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            $rawCode = (int) $e->getCode();
+            $code = ($rawCode >= 400 && $rawCode < 600) ? $rawCode : 500;
+
+            return $this->errorResponse($e->getMessage(), $code);
         }
     }
 
@@ -56,6 +59,7 @@ class StripeController extends BaseApiController
 
         $user->update([
             'plan_id' => $freePlan->id,
+            'subscribed_at' => now(),
             'usage_started_at' => now(),
         ]);
 
