@@ -41,6 +41,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::put('/me', [AuthController::class, 'updateProfile']);
+        Route::post('/me/avatar', [AuthController::class, 'uploadAvatar']);
+        Route::delete('/me/avatar', [AuthController::class, 'removeAvatar']);
 
         // Chat - moderate rate limiting
         Route::middleware(['throttle:30,1', 'check.chat.access'])->group(function () {

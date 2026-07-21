@@ -332,10 +332,11 @@ const UserMessage = memo(function UserMessage({
   );
 });
 
-const AssistantMessage = memo(function AssistantMessage({ content }: { readonly content: string }) {
+const AssistantMessage = memo(function AssistantMessage({ content, streaming }: { readonly content: string; readonly streaming?: boolean }) {
   return (
     <div className="text-sm leading-relaxed text-ink">
       <MarkdownContent content={content} />
+      {streaming && <span className="inline-block h-4 w-0.5 animate-pulse bg-blue align-middle" />}
     </div>
   );
 });
@@ -343,31 +344,22 @@ const AssistantMessage = memo(function AssistantMessage({ content }: { readonly 
 function MessageItem({
   msg,
   onEdit,
+  showCursor,
 }: {
   readonly msg: Message;
   readonly onEdit?: (messageId: number, newContent: string) => void;
+  readonly showCursor?: boolean;
 }) {
   return (
     <div className={`mx-auto mb-6 max-w-3xl ${msg.role === "user" ? "flex justify-end" : ""}`}>
       {msg.role === "user" ? (
         <UserMessage content={msg.content} messageId={msg.id} onEdit={onEdit} />
       ) : (
-        <AssistantMessage content={msg.content} />
+        <AssistantMessage content={msg.content} streaming={showCursor} />
       )}
     </div>
   );
 }
-
-const StreamingMessage = memo(function StreamingMessage({ content }: { readonly content: string }) {
-  return (
-    <div className="mx-auto mb-6 max-w-3xl">
-      <div className="text-sm leading-relaxed text-ink">
-        <MarkdownContent content={content} />
-        <span className="inline-block h-4 w-0.5 animate-pulse bg-blue align-middle" />
-      </div>
-    </div>
-  );
-});
 
 export default function BuildPage() {
   const { token } = useAuth();
@@ -379,6 +371,7 @@ export default function BuildPage() {
     createConversation,
     appendMessage,
     updateMessage,
+    truncateMessagesAfter,
     deleteConversation,
     selectConversation,
     newChat,
@@ -387,36 +380,123 @@ export default function BuildPage() {
     } = useConversations();
 
   const [messages, setMessages] = useState<readonly Message[]>([]);
-  const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [accessExpired, setAccessExpired] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const currentConvoIdRef = useRef<number | null>(null);
   const messagesRef = useRef<readonly Message[]>([]);
   const isStreamingRef = useRef(false);
-  const scrollTimeoutRef = useRef(0);
+  const streamBufferRef = useRef("");
+  const displayedLenRef = useRef(0);
+  const streamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isNearBottomRef = useRef(true);
+  const streamDoneRef = useRef(false);
+  const streamConvoIdRef = useRef<number | null>(null);
 
   messagesRef.current = messages;
   isStreamingRef.current = isStreaming;
 
-  const scrollToBottom = useCallback(() => {
-    if (scrollTimeoutRef.current) return;
-    scrollTimeoutRef.current = window.setTimeout(() => {
-      scrollTimeoutRef.current = 0;
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+  const flushStreamBuffer = useCallback(() => {
+    const buf = streamBufferRef.current;
+    const shown = displayedLenRef.current;
+
+    if (buf.length === shown) {
+      if (streamDoneRef.current) {
+        const finalContent = buf;
+        streamDoneRef.current = false;
+        streamTimerRef.current = null;
+        setIsStreaming(false);
+        isStreamingRef.current = false;
+        const convoId = streamConvoIdRef.current;
+        if (finalContent && convoId) {
+          const assistantMessage: Message = { role: "assistant", content: finalContent };
+          appendMessage(convoId, assistantMessage).catch(() => {});
+        }
+        return;
+      }
+      streamTimerRef.current = setTimeout(flushStreamBuffer, 15);
+      return;
+    }
+
+    const rest = buf.slice(shown);
+    const match = rest.match(/^(\s*\S+[\s,.!?;:]*|[^\s]*)/);
+    if (!match || !match[1]) {
+      streamTimerRef.current = setTimeout(flushStreamBuffer, 15);
+      return;
+    }
+    const word = match[1];
+    const end = shown + word.length;
+    const lastChar = word.trimEnd().slice(-1);
+    let delay: number;
+    if (lastChar === "." || lastChar === "!" || lastChar === "?") {
+      delay = 120;
+    } else if (lastChar === "," || lastChar === ";" || lastChar === ":") {
+      delay = 70;
+    } else if (word.trimEnd().length <= 3) {
+      delay = 35;
+    } else if (word.trimEnd().length <= 8) {
+      delay = 55;
+    } else {
+      delay = 80;
+    }
+
+    displayedLenRef.current = end;
+    const content = buf.slice(0, end);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (!last || last.role !== "assistant") return prev;
+      return [...prev.slice(0, -1), { ...last, content }];
+    });
+    streamTimerRef.current = setTimeout(flushStreamBuffer, delay);
+  }, [appendMessage]);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  const checkNearBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const threshold = 150;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent, scrollToBottom]);
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkNearBottom, { passive: true });
+    return () => el.removeEventListener("scroll", checkNearBottom);
+  }, [checkNearBottom]);
+
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      scrollToBottom(isStreaming ? "smooth" : "instant");
+    }
+  }, [messages, isStreaming, scrollToBottom]);
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  const autoResize = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (streamTimerRef.current) {
+        clearTimeout(streamTimerRef.current);
+        streamTimerRef.current = null;
+      }
+    };
   }, []);
 
   const sendMessage = useCallback(
@@ -437,11 +517,14 @@ export default function BuildPage() {
         }
 
         const updatedMessages = [...messagesRef.current, userMessage];
-        setMessages(updatedMessages);
+        setMessages([...updatedMessages, { role: "assistant", content: "" }]);
 
-        appendMessage(convoId, userMessage).catch(() => {});
+        appendMessage(convoId, userMessage).then((saved) => {
+          setMessages((prev) =>
+            prev.map((m) => (m === userMessage ? { ...m, id: saved.id } : m)),
+          );
+        }).catch(() => {});
 
-        setStreamingContent("");
         setIsStreaming(true);
         setInput("");
 
@@ -485,84 +568,91 @@ export default function BuildPage() {
         let fullContent = "";
         let buffer = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        streamBufferRef.current = "";
+        displayedLenRef.current = 0;
+        streamDoneRef.current = false;
+        streamConvoIdRef.current = convoId;
+        streamTimerRef.current = setTimeout(flushStreamBuffer, 15);
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+        try {
+          let streamDone = false;
+          while (!streamDone) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const data = trimmed.slice(6);
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
 
-            if (data === "[DONE]") {
-              const assistantMessage: Message = { role: "assistant", content: fullContent };
-              setMessages((prev) => [...prev, assistantMessage]);
-              if (currentConvoIdRef.current) {
-                appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data: ")) continue;
+              const data = trimmed.slice(6);
+
+              if (data === "[DONE]") {
+                streamDone = true;
+                break;
               }
-              setStreamingContent("");
-              setIsStreaming(false);
-              isStreamingRef.current = false;
-              return;
-            }
 
-            let streamError: string | null = null;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.error) {
-                streamError = parsed.error;
-              } else if (parsed.content) {
-                fullContent += parsed.content;
-                setStreamingContent(fullContent);
+              let streamError: string | null = null;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.error) {
+                  streamError = parsed.error;
+                } else if (parsed.content) {
+                  fullContent += parsed.content;
+                  streamBufferRef.current = fullContent;
+                }
+              } catch {
+                // skip malformed JSON
               }
-            } catch {
-              // skip malformed JSON
-            }
-            if (streamError) {
-              throw new Error(streamError);
+              if (streamError) {
+                throw new Error(streamError);
+              }
             }
           }
-        }
-
-        if (fullContent) {
-          const assistantMessage: Message = { role: "assistant", content: fullContent };
-          setMessages((prev) => [...prev, assistantMessage]);
-          if (currentConvoIdRef.current) {
-            appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+        } finally {
+          if (!abortRef.current?.signal.aborted) {
+            streamBufferRef.current = fullContent;
+            streamDoneRef.current = true;
           }
         }
-        setStreamingContent("");
-        setIsStreaming(false);
-        isStreamingRef.current = false;
       } catch (err) {
-        isStreamingRef.current = false;
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setIsStreaming(false);
-          setStreamingContent("");
+        if (abortRef.current?.signal.aborted) {
+          streamBufferRef.current = streamBufferRef.current.slice(0, displayedLenRef.current);
+          streamDoneRef.current = true;
+          if (!streamTimerRef.current) {
+            streamTimerRef.current = setTimeout(flushStreamBuffer, 15);
+          }
           return;
         }
-        const msg = err instanceof Error ? err.message : "Something went wrong.";
-        const assistantMessage: Message = { role: "assistant", content: `Error: ${msg}` };
-        setMessages((prev) => [...prev, assistantMessage]);
-        if (currentConvoIdRef.current) {
-          appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+        isStreamingRef.current = false;
+        if (streamTimerRef.current) {
+          clearTimeout(streamTimerRef.current);
+          streamTimerRef.current = null;
         }
-        setStreamingContent("");
+        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        const errorMessage: Message = { role: "assistant", content: `Error: ${msg}` };
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === "assistant" && !last.content) {
+            return [...prev.slice(0, -1), errorMessage];
+          }
+          return [...prev, errorMessage];
+        });
+        if (currentConvoIdRef.current) {
+          appendMessage(currentConvoIdRef.current, errorMessage).catch(() => {});
+        }
         setIsStreaming(false);
       }
     },
-    [token, createConversation, appendMessage],
+    [token, createConversation, appendMessage, flushStreamBuffer],
   );
 
   const handleSelectConversation = useCallback(
     (id: number) => {
       abortRef.current?.abort();
       setIsStreaming(false);
-      setStreamingContent("");
       currentConvoIdRef.current = id;
       selectConversation(id);
     },
@@ -570,7 +660,7 @@ export default function BuildPage() {
   );
 
   useEffect(() => {
-    if (activeId !== null) {
+    if (activeId !== null && !isStreamingRef.current) {
       setMessages(activeMessages);
     }
   }, [activeId, activeMessages]);
@@ -578,10 +668,12 @@ export default function BuildPage() {
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
     setIsStreaming(false);
-    setStreamingContent("");
     setMessages([]);
     currentConvoIdRef.current = null;
     newChat();
+    requestAnimationFrame(() => {
+      if (inputRef.current) inputRef.current.style.height = "auto";
+    });
   }, [newChat]);
 
   const handleDeleteConversation = useCallback(
@@ -590,7 +682,6 @@ export default function BuildPage() {
       if (currentConvoIdRef.current === id) {
         abortRef.current?.abort();
         setIsStreaming(false);
-        setStreamingContent("");
         setMessages([]);
         currentConvoIdRef.current = null;
       }
@@ -605,7 +696,6 @@ export default function BuildPage() {
 
       abortRef.current?.abort();
       setIsStreaming(false);
-      setStreamingContent("");
       isStreamingRef.current = false;
 
       try {
@@ -613,6 +703,8 @@ export default function BuildPage() {
       } catch {
         return;
       }
+
+      truncateMessagesAfter(messageId);
 
       const idx = messagesRef.current.findIndex((m) => m.id === messageId);
       if (idx === -1) return;
@@ -628,7 +720,7 @@ export default function BuildPage() {
       }));
 
       isStreamingRef.current = true;
-      setStreamingContent("");
+      setMessages([...trimmed, { role: "assistant", content: "" }]);
       setIsStreaming(true);
 
       const headers: Record<string, string> = {
@@ -672,77 +764,85 @@ export default function BuildPage() {
         let fullContent = "";
         let buffer = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        streamBufferRef.current = "";
+        displayedLenRef.current = 0;
+        streamDoneRef.current = false;
+        streamConvoIdRef.current = convoId;
+        streamTimerRef.current = setTimeout(flushStreamBuffer, 15);
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+        try {
+          let streamDone = false;
+          while (!streamDone) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const data = trimmed.slice(6);
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
 
-            if (data === "[DONE]") {
-              const assistantMessage: Message = { role: "assistant", content: fullContent };
-              setMessages((prev) => [...prev, assistantMessage]);
-              if (currentConvoIdRef.current) {
-                appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data: ")) continue;
+              const data = trimmed.slice(6);
+
+              if (data === "[DONE]") {
+                streamDone = true;
+                break;
               }
-              setStreamingContent("");
-              setIsStreaming(false);
-              isStreamingRef.current = false;
-              return;
-            }
 
-            let streamError: string | null = null;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.error) {
-                streamError = parsed.error;
-              } else if (parsed.content) {
-                fullContent += parsed.content;
-                setStreamingContent(fullContent);
+              let streamError: string | null = null;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.error) {
+                  streamError = parsed.error;
+                } else if (parsed.content) {
+                  fullContent += parsed.content;
+                  streamBufferRef.current = fullContent;
+                }
+              } catch {
+                // skip malformed JSON
               }
-            } catch {
-              // skip malformed JSON
-            }
-            if (streamError) {
-              throw new Error(streamError);
+              if (streamError) {
+                throw new Error(streamError);
+              }
             }
           }
-        }
-
-        if (fullContent) {
-          const assistantMessage: Message = { role: "assistant", content: fullContent };
-          setMessages((prev) => [...prev, assistantMessage]);
-          if (currentConvoIdRef.current) {
-            appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+        } finally {
+          if (!abortRef.current?.signal.aborted) {
+            streamBufferRef.current = fullContent;
+            streamDoneRef.current = true;
           }
         }
-        setStreamingContent("");
-        setIsStreaming(false);
-        isStreamingRef.current = false;
       } catch (err) {
-        isStreamingRef.current = false;
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setIsStreaming(false);
-          setStreamingContent("");
+        if (abortRef.current?.signal.aborted) {
+          streamBufferRef.current = streamBufferRef.current.slice(0, displayedLenRef.current);
+          streamDoneRef.current = true;
+          if (!streamTimerRef.current) {
+            streamTimerRef.current = setTimeout(flushStreamBuffer, 15);
+          }
           return;
         }
-        const msg = err instanceof Error ? err.message : "Something went wrong.";
-        const assistantMessage: Message = { role: "assistant", content: `Error: ${msg}` };
-        setMessages((prev) => [...prev, assistantMessage]);
-        if (currentConvoIdRef.current) {
-          appendMessage(currentConvoIdRef.current, assistantMessage).catch(() => {});
+        isStreamingRef.current = false;
+        if (streamTimerRef.current) {
+          clearTimeout(streamTimerRef.current);
+          streamTimerRef.current = null;
         }
-        setStreamingContent("");
+        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        const errorMessage: Message = { role: "assistant", content: `Error: ${msg}` };
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === "assistant" && !last.content) {
+            return [...prev.slice(0, -1), errorMessage];
+          }
+          return [...prev, errorMessage];
+        });
+        if (currentConvoIdRef.current) {
+          appendMessage(currentConvoIdRef.current, errorMessage).catch(() => {});
+        }
         setIsStreaming(false);
       }
     },
-    [token, updateMessage, appendMessage],
+    [token, updateMessage, appendMessage, flushStreamBuffer],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -753,6 +853,9 @@ export default function BuildPage() {
     (e: React.FormEvent) => {
       e.preventDefault();
       sendMessage(input);
+      requestAnimationFrame(() => {
+        if (inputRef.current) inputRef.current.style.height = "auto";
+      });
     },
     [input, sendMessage],
   );
@@ -762,10 +865,19 @@ export default function BuildPage() {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         sendMessage(input);
+        requestAnimationFrame(() => {
+          if (inputRef.current) inputRef.current.style.height = "auto";
+        });
       }
     },
     [input, sendMessage],
   );
+
+  const handleStop = useCallback(() => {
+    streamBufferRef.current = streamBufferRef.current.slice(0, displayedLenRef.current);
+    streamDoneRef.current = true;
+    abortRef.current?.abort();
+  }, []);
 
   return (
     <div className="flex h-screen bg-bg pt-16 md:pt-[72px]">
@@ -852,7 +964,7 @@ export default function BuildPage() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
               {isLoadingMessages && messages.length === 0 && !isStreaming && (
                 <MessageSkeleton />
               )}
@@ -888,7 +1000,7 @@ export default function BuildPage() {
               <p className="mb-8 max-w-md text-center text-sm text-muted px-4">
                 Ask me anything about programming, architecture, debugging, code review, or system design.
               </p>
-              <div className="grid w-full max-w-lg grid-cols-1 sm:grid-cols-2 gap-3 px-4">
+              <div className="grid w-full max-w-3xl grid-cols-1 sm:grid-cols-2 gap-3 px-4">
                 {["Help me debug this error", "Explain this code pattern", "Review my PR changes", "Design a REST API"].map(
                   (suggestion) => (
                     <button
@@ -897,7 +1009,7 @@ export default function BuildPage() {
                         setInput(suggestion);
                         inputRef.current?.focus();
                       }}
-                      className="rounded-lg border border-line bg-surface px-4 py-3 text-left text-sm text-muted transition-colors hover:border-blue hover:text-ink"
+                      className="rounded-lg border border-line bg-surface px-4 py-3 text-center text-sm text-muted transition-colors hover:border-blue hover:text-ink"
                     >
                       {suggestion}
                     </button>
@@ -907,9 +1019,12 @@ export default function BuildPage() {
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <MessageItem key={msg.id || i} msg={msg} onEdit={handleEditMessage} />
-          ))}
+          {messages.map((msg, i) => {
+            const isLast = i === messages.length - 1 && isStreaming && msg.role === "assistant";
+            return (
+              <MessageItem key={msg.id || i} msg={msg} onEdit={handleEditMessage} showCursor={isLast} />
+            );
+          })}
 
           {accessExpired && !isStreaming && (
             <div className="mx-auto mb-6 max-w-3xl rounded-xl border border-yellow/30 bg-yellow/5 p-4">
@@ -930,8 +1045,7 @@ export default function BuildPage() {
             </div>
           )}
 
-          {isStreaming && streamingContent && <StreamingMessage content={streamingContent} />}
-          {isStreaming && !streamingContent && <StreamingSkeleton />}
+          {isStreaming && (messages.length === 0 || messages[messages.length - 1]?.role !== "assistant") && <StreamingSkeleton />}
           <div ref={messagesEndRef} />
         </div>
 
@@ -943,20 +1057,45 @@ export default function BuildPage() {
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => { setInput(e.target.value); autoResize(); }}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything..."
                 rows={1}
-                disabled={isStreaming || !!accessExpired}
-                className="flex-1 resize-none rounded-xl border border-line bg-bg px-4 py-3 text-sm text-ink placeholder-muted focus:border-blue focus:outline-none disabled:opacity-50"
+                disabled={!!accessExpired}
+                className="flex-1 resize-none overflow-y-auto rounded-xl border border-line bg-bg px-4 py-3 text-sm text-ink placeholder-muted focus:border-blue focus:outline-none disabled:opacity-50"
+                style={{ maxHeight: "calc(1.5em * 3 + 0.75rem * 2 + 2px)" }}
               />
-              <button
-                type="submit"
-                disabled={!input.trim() || isStreaming || !!accessExpired}
-                className="self-end rounded-xl bg-blue px-5 py-3 text-sm font-semibold text-bg transition-colors hover:bg-blue/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Send
-              </button>
+              {isStreaming ? (
+                <div className="relative group self-end">
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="rounded-xl border border-line bg-surface2 p-3 text-muted transition-all duration-200 hover:border-red/50 hover:text-red hover:scale-110 hover:shadow-md active:scale-95"
+                  >
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  </button>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-bg opacity-0 shadow-lg transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 translate-y-1">
+                    Stop generating
+                  </span>
+                </div>
+              ) : (
+                <div className="relative group self-end">
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || !!accessExpired}
+                    className="rounded-xl bg-blue p-3 text-bg transition-all duration-200 hover:bg-blue/90 hover:scale-110 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                    </svg>
+                  </button>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-bg opacity-0 shadow-lg transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 translate-y-1">
+                    Send message
+                  </span>
+                </div>
+              )}
             </form>
           </div>
         )}

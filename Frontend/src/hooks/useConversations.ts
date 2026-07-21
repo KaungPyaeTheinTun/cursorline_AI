@@ -99,12 +99,14 @@ export function useConversations() {
   );
 
   const appendMessage = useCallback(
-    async (conversationId: number, message: Message): Promise<void> => {
-      await apiClient.post(`/conversations/${conversationId}/messages`, {
+    async (conversationId: number, message: Message): Promise<Message> => {
+      const { data } = await apiClient.post<Message>(`/conversations/${conversationId}/messages`, {
         role: message.role,
         content: message.content,
       });
-      setActiveMessages((prev) => [...prev, message]);
+      const saved = { ...message, id: data.id };
+      setActiveMessages((prev) => [...prev, saved]);
+      return saved;
     },
     [],
   );
@@ -120,6 +122,13 @@ export function useConversations() {
     },
     [],
   );
+
+  const truncateMessagesAfter = useCallback((messageId: number) => {
+    setActiveMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === messageId);
+      return idx === -1 ? prev : prev.slice(0, idx + 1);
+    });
+  }, []);
 
   const updateTitle = useCallback(async (id: number, title: string) => {
     try {
@@ -159,6 +168,7 @@ export function useConversations() {
     createConversation,
     appendMessage,
     updateMessage,
+    truncateMessagesAfter,
     updateTitle,
     deleteConversation,
     selectConversation,

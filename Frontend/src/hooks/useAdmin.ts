@@ -90,6 +90,20 @@ export function useAdmin() {
     }
   }, []);
 
+  const uploadAvatar = useCallback(async (file: File): Promise<AdminProfile> => {
+    const formData = new FormData();
+    formData.append("avatar", file);
+    const { data } = await apiClient.post<AdminProfile>("/me/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+  }, []);
+
+  const removeAvatar = useCallback(async (): Promise<AdminProfile> => {
+    const { data } = await apiClient.delete<AdminProfile>("/me/avatar");
+    return data;
+  }, []);
+
   return {
     isLoading,
     fetchFaqs,
@@ -98,5 +112,7 @@ export function useAdmin() {
     deleteFaq,
     fetchProfile,
     updateProfile,
+    uploadAvatar,
+    removeAvatar,
   };
 }

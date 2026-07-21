@@ -9,6 +9,7 @@ use App\Http\Resources\UserResource;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class AuthController extends BaseApiController
 {
@@ -66,6 +67,44 @@ class AuthController extends BaseApiController
         return $this->successResponse(
             new UserResource($user),
             'Profile updated.',
+        );
+    }
+
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'avatar' => ['required', 'file', 'image', 'max:2048'],
+        ]);
+
+        $user = $request->user();
+
+        if ($user->avatar && str_starts_with($user->avatar, 'avatars/')) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+
+        $path = $request->file('avatar')->store('avatars', 'public');
+
+        $user->update(['avatar' => $path]);
+
+        return $this->successResponse(
+            new UserResource($user->fresh()),
+            'Avatar uploaded.',
+        );
+    }
+
+    public function removeAvatar(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->avatar && str_starts_with($user->avatar, 'avatars/')) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+
+        $user->update(['avatar' => null]);
+
+        return $this->successResponse(
+            new UserResource($user->fresh()),
+            'Avatar removed.',
         );
     }
 }
