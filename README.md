@@ -8,7 +8,7 @@ AI-powered coding assistant with real-time streaming chat, conversation manageme
 |-------|-----------|
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Zustand |
 | Backend | Laravel 9, PHP 8, MySQL, Laravel Sanctum |
-| AI | Google Gemini (default), OpenAI, Groq |
+| AI | Groq (llama-3.3-70b-versatile) |
 | Payments | Stripe |
 
 ## Requirements
@@ -93,11 +93,7 @@ The app runs at `http://localhost:5173`.
 | `DB_DATABASE` | Database name (`cursorline`) |
 | `DB_USERNAME` | MySQL username |
 | `DB_PASSWORD` | MySQL password |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `GEMINI_MODEL` | Gemini model (default: `gemini-2.0-flash`) |
-| `OPENAI_API_KEY` | OpenAI API key (optional) |
-| `OPENAI_MODEL` | OpenAI model (default: `gpt-4o-mini`) |
-| `GROQ_API_KEY` | Groq API key (optional) |
+| `GROQ_API_KEY` | Groq API key |
 | `GROQ_MODEL` | Groq model (default: `llama-3.3-70b-versatile`) |
 | `STRIPE_SECRET_KEY` | Stripe secret key |
 | `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key |
