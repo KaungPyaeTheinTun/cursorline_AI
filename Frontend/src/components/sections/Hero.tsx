@@ -37,11 +37,11 @@ export default function Hero() {
         <span className="mb-4 inline-block rounded-full border border-line bg-surface px-3 py-1 font-mono text-xs text-muted">
           Now in public beta
         </span>
-        {/* <h1 className="mx-auto mb-6 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl">
+        <h1 className="mx-auto mb-6 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl">
           Your entire repo,
           <br />
           <span className="text-blue">understood.</span>
-        </h1> */}
+        </h1>
         <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-muted">
           Cursorline indexes every file in your repository so autocomplete,
           debugging, and refactors are informed by your full codebase — not just
