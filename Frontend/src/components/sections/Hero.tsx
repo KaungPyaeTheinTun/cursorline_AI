@@ -9,10 +9,13 @@ export default function Hero() {
   const ref = useScrollReveal();
 
   return (
-    <section className="relative overflow-hidden pt-32 pb-12 md:pt-40 md:pb-16" ref={ref}>
+    <section
+      className="relative overflow-hidden pt-32 pb-12 md:pt-40 md:pb-16"
+      ref={ref}
+    >
       <div className="absolute inset-0 z-0">
         <Lightfall
-          colors={['#5FA8FF', '#232A38', '#11151C']}
+          colors={["#5FA8FF", "#232A38", "#11151C"]}
           backgroundColor="#0B0E14"
           speed={0.4}
           streakCount={6}
@@ -34,19 +37,23 @@ export default function Hero() {
         <span className="mb-4 inline-block rounded-full border border-line bg-surface px-3 py-1 font-mono text-xs text-muted">
           Now in public beta
         </span>
-        <h1 className="mx-auto mb-6 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl">
+        {/* <h1 className="mx-auto mb-6 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl">
           Your entire repo,
           <br />
           <span className="text-blue">understood.</span>
-        </h1>
+        </h1> */}
         <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-muted">
           Cursorline indexes every file in your repository so autocomplete,
-          debugging, and refactors are informed by your full codebase — not
-          just the file you have open.
+          debugging, and refactors are informed by your full codebase — not just
+          the file you have open.
         </p>
         <div className="mb-6 flex flex-wrap items-center justify-center gap-4">
           {!isAuthLoaded ? (
-            <span className="text-lg text-muted loading-dots"><span>.</span><span>.</span><span>.</span></span>
+            <span className="text-lg text-muted loading-dots">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
           ) : isSubscribed ? (
             <a
               href="/build"
